@@ -1,154 +1,136 @@
-#subir los datos
-datos <- readRDS("MatrizDatosFinalesAves.rds")
+#upload the data
+datos <- readRDS("data/MatrizDatosFinalesAves.rds")
 
-#revisar que los datos subieron de forma correcta
-View (datos)
+#check that the data were uploaded correctly
+# (avoid interactive commands in scripts)
 
-#los nombres de la primera columna estan separados por " " asi que vamos a cambiarlo
-#por "_"
-
+#the names of the first column are separated by " ", so we are going to change it
+#to "_"
 nombres_fila <- rownames(datos)
 nombres_fila <- gsub(" ", "_", nombres_fila)
 rownames(datos) <- nombres_fila
 
-#organizar las especies por orden alfabetico
-datos <- datos[order(nombres_fila), ]
+#organize species in alphabetical order
+datos <- datos[order(rownames(datos)), , drop = FALSE]
 
 
-#vamos a verificar que se hayan ejecutado los cambios en la matriz datos
-View (datos)
+#we are going to organize the matrix to perform functional diversity analyses
+#to transpose the data matrix so that species are in the columns and communities
+#in the rows
+
+comunidadesGBIF <- t(datos)
 
 
+##Check that all species are present in at least one community
+#1) Row sums to verify that each community has at least one species
 
-#organizar la matriz para realizar los analisis de diversidad funcional
-#para transponer la matriz de datos para que las especies esten en las columnas y las comunidades
-#en las filas
+totalComunidades <- rowSums(comunidadesGBIF)
 
+#Column sums to verify that species are represented in at least
+#one community
 
-comunidadesGBIF<-t(datos)
-#revisar la matriz
-View(comunidadesGBIF)
-
-
-##Revisar que todas las especies esten presentes en todas las comunidades.
-#1) Sumatoria de filas para verificar que en cada comunidad haya por lo  menos una especie
+totalespecies <- colSums(comunidadesGBIF)
 
 
-totalComunidades = rowSums(comunidadesGBIF)
+#remove species that are not recorded in any community
+#1) remove species from the community matrix
 
-totalComunidades
-
-#Sumatoria de las filas para verificar que las especies por lo menos esten represetadas
-#una comunidad
-
-totalespecies = colSums(comunidadesGBIF)
-totalespecies
+totalespecies <- colSums(comunidadesGBIF > 0) > 0
+comunidadesFinal <- comunidadesGBIF[, totalespecies, drop = FALSE]
 
 
-#quitar especies que no estan registradas en ninguna comunidad
-#1) quitar especies en la matriz de comunidades
+#we are going to upload the Conney 2021 matrix and from this we are going to build the
+#final community matrix that only contains species with coloration measurements
 
-totalespecies = (colSums(comunidadesGBIF > 0))
-                 
-comunidadesfinal = comunidadesGBIF [ , totalespecies]
-ncol(totalComunidades)
+medicionesColor <- read.csv("data/Conney2021.csv", stringsAsFactors = FALSE)
 
-
-
-#vamos a subir la matriz de Conney2021 y a partir de esta vamos a construir las 
-#matriz final de comunidades que solo contenga las especies que tienen mediciones de color.
-
-medicionesColor <- read.csv("Conney2021.csv")
-
-View(medicionesColor)
+#standardize species names in coloration data to match community matrix
+medicionesColor$Species <- gsub(" ", "_", medicionesColor$Species)
 
 
+#Now we are going to build the community matrix only with the species names
+#that have coloration measurements
 
-#Ahora vamos a construir la matriz de comunidades solo con  el nombre de las especies con mediciones
-# Obtener los nombres de las especies en medicionesColor
+#get the species names in medicionesColor
 speciesInMedicionesColor <- medicionesColor$Species
 
-#Verificar los nombres de las columnas
-colnames(comunidadesGBIF)
+
+#filter the columns of comunidadesFinal that are present in medicionesColor
+comunidadesFinal <- comunidadesFinal[
+  , colnames(comunidadesFinal) %in% speciesInMedicionesColor,
+  drop = FALSE
+]
 
 
-# Filtrar las columnas de comunidadesGBIF que están en medicionesColor
-comunidadesFinal<- comunidadesGBIF[, colnames(comunidadesGBIF) %in% speciesInMedicionesColor]
+#check dimensions of the final community matrix
+dim(comunidadesFinal)
 
 
-# Verificar el dataframe resultante
-
-View (comunidadesFinal)
-
-#exportar la matriz de datos  de comunidades final (solo con las sps que tienen datos de colroacion)
-write.csv(datos, "comunidades.csv")
+#check if output directory exists, if not create it
+if (!dir.exists("output")) {
+  dir.create("output")
+}
 
 
-#Debemos crear dos dataframes de coloracion uno para machos y el otro para hembras
-# a partir del dataframe de coloracion de Conney 
+#export the final community data matrix (only species with coloration data)
+write.csv(
+  comunidadesFinal,
+  "output/comunidades_final.csv",
+  row.names = TRUE
+)
 
 
-#1) vamos a filtrar las especies que estan presentes en comunidadesFinal y que estan en
-#las medicioens de coloracion.
+#we create a vector with the species names present in the final community matrix
+#this will be used later to build male and female coloration dataframes
 
-
-#extraemos los nombres de las especies de comunidades final
 speciesInComunidadesFinal <- colnames(comunidadesFinal)
 
-#vamos a crear un nuevo dataframe solo tenien en cuentas las especies presentes en los 
-#dos dataframes y con las columnas de nombre de especies, sexo y las mediciones de color
-medicionesColorFinal <- medicionesColor[medicionesColor$Species %in% speciesInComunidadesFinal, c(1, 2, 5, 6)]
+#we are going to create a new dataframe only taking into account the species present in
+#both dataframes and keeping the columns with species name, sex and coloration measurements
+
+medicionesColorFinal <- medicionesColor[
+  medicionesColor$Species %in% speciesInComunidadesFinal,
+  c(1, 2, 5, 6)
+]
 
 
-#Organizar por orden alfabetico
-medicionesColorFinal <- medicionesColorFinal[order(medicionesColorFinal$Species), ]
+#organize in alphabetical order
+medicionesColorFinal <- medicionesColorFinal[
+  order(medicionesColorFinal$Species),
+  ,
+  drop = FALSE
+]
 
 
-#revisamos como queda la matriz
-View(medicionesColorFinal)
+#2) now we are going to create a dataframe for coloration measurements for females and males
+
+#for females
+hembras <- medicionesColorFinal[medicionesColorFinal$Sex == "F", , drop = FALSE]
 
 
-
-#2) ahora vamos a crear un dataframe para las mediciones de coloracion para hembras y machos
-#para las hembras
-
-hembras <- medicionesColorFinal[medicionesColorFinal$Sex == "F", ]
-View(hembras)
-
-#organizar la matriz para que tome la primera columna como el nombre de las filas
-# y eliminar la columna de Sex
+#organize the matrix so that the first column is used as row names
+#and remove the Sex column
 
 rownames(hembras) <- hembras$Species
-hembras <- hembras [, -1]
-hembras <- hembras[, -which(colnames(hembras) == "Sex")]
-View(hembras)
+hembras <- hembras[, -which(colnames(hembras) %in% c("Species", "Sex")), drop = FALSE]
 
 
+#for males
+machos <- medicionesColorFinal[medicionesColorFinal$Sex == "M", , drop = FALSE]
 
 
-
-#para los machos
-
-machos <- medicionesColorFinal[medicionesColorFinal$Sex == "M", ]
-View(machos)
-
-#organizar la matriz para que tome la primera columna como el nombre de las filas
+#organize the matrix so that the first column is used as row names
+#and remove the Sex column
 
 rownames(machos) <- machos$Species
-machos<- machos [, -1]
-machos <- machos[, -which(colnames(machos) == "Sex")]
-View(machos)
+machos <- machos[, -which(colnames(machos) %in% c("Species", "Sex")), drop = FALSE]
 
 
-##ANALISIS DE DIVERSIDAD##
+##DIVERSITY ANALYSES##
 
-#Analisis de diversidad Funcional
-#1) cargamos las librerias
-
-install.packages("dplyr")
-install.packages("FD")
-install.packages("Rcpp")
-install.packages("hillR")
+#Functional diversity analyses
+#1) we load the libraries
+#(packages must be installed previously)
 
 library(dplyr)
 library(FD)
@@ -156,375 +138,477 @@ library(Rcpp)
 library(hillR)
 
 
-#Analisis basados en numeros de Hill
-fd_0<-hill_func(comm = comunidadesFinal, traits = hembras, q=0)
+#Hill numbers–based analyses
+fd_0 <- hill_func(
+  comm   = comunidadesFinal,
+  traits = hembras,
+  q      = 0
+)
 
 
-#Analisis basados en el espacio funcional para HEMBRAS
-#subimos la matriz de datos de tipo de rasgos
+#Functional space–based analyses for FEMALES
+#we upload the trait-type data matrix
 
-variablesBD <- read.csv("VariablesBD.csv")
-View(variablesBD)
+variablesBD <- read.csv("data/VariablesBD.csv", stringsAsFactors = FALSE)
 
-install.packages("mFD")
+
 library(mFD)
 
-hembras <- 
 
+#we transform the community matrix into an abundance matrix
 Mat_AbundanciasH <- as.matrix(comunidadesFinal)
-sp_distH<- mFD::funct.dist(sp_tr = hembras$lociUVS, tr_cat= variablesBD, metric= "euclidean")
 
 
+#we calculate the species trait distance matrix using female coloration traits
+sp_distH <- mFD::funct.dist(
+  sp_tr  = hembras,
+  tr_cat = variablesBD,
+  metric = "euclidean"
+)
 
-fspaces_qualityH <- mFD::quality.fspaces(sp_dist= sp_distH, maxdim_pcoa = 2)
-round(fspaces_qualityH$"quality_fspaces", 3)
-sp_faxes_coordH <-fspaces_qualityH$"details_fspaces"$"sp_pc_coord"
 
-alpha_fd_indicesH <- mFD::alpha.fd.multidim(sp_faxes_coord =sp_faxes_coordH[ , c("PC1", "PC2")], asb_sp_w = Mat_AbundanciasH, ind_vect = c("feve", "fric", "fdiv", "fspe"), scaling = TRUE, check_input = TRUE, details_returned = TRUE)
+#we evaluate the quality of the functional space
+fspaces_qualityH <- mFD::quality.fspaces(
+  sp_dist     = sp_distH,
+  maxdim_pcoa = 2
+)
+
+
+#get species coordinates in the functional space
+sp_faxes_coordH <- fspaces_qualityH$details_fspaces$sp_pc_coord
+
+
+#we calculate alpha functional diversity indices
+alpha_fd_indicesH <- mFD::alpha.fd.multidim(
+  sp_faxes_coord = sp_faxes_coordH[, c("PC1", "PC2")],
+  asb_sp_w       = Mat_AbundanciasH,
+  ind_vect       = c("feve", "fric", "fdiv", "fspe"),
+  scaling        = TRUE,
+  check_input    = TRUE,
+  details_returned = TRUE
+)
+
 
 ResultadosHembras <- alpha_fd_indicesH$functional_diversity_indices
 
-write.table(ResultadosHembras, "resultadosHembras.txt")
 
-View(ResultadosHembras)
+#we export the female results
+write.table(
+  ResultadosHembras,
+  "output/resultadosHembras.txt",
+  sep = "\t",
+  row.names = TRUE
+)
 
-#Analisis basados en el espacio funcional para MACHOS
 
+#Functional space–based analyses for MALES
 
+#we transform the community matrix into an abundance matrix
 Mat_AbundanciasM <- as.matrix(comunidadesFinal)
-sp_distM<- mFD::funct.dist(sp_tr = machos$LociUVS, tr_cat= variablesBD, metric= "euclidean")
 
-fspaces_qualityM <- mFD::quality.fspaces(sp_dist= sp_distM, maxdim_pcoa = 2)
-round(fspaces_qualityM$"quality_fspaces", 3)
-sp_faxes_coordM <-fspaces_qualityM$"details_fspaces"$"sp_pc_coord"
 
-alpha_fd_indicesM <- mFD::alpha.fd.multidim(sp_faxes_coord =sp_faxes_coord[ , c("PC1", "PC2")], asb_sp_w = Mat_AbundanciasM, ind_vect = c("feve", "fric", "fdiv", "fspe"), scaling = TRUE, check_input = TRUE, details_returned = TRUE)
+#we calculate the species trait distance matrix using male coloration traits
+sp_distM <- mFD::funct.dist(
+  sp_tr  = machos,
+  tr_cat = variablesBD,
+  metric = "euclidean"
+)
+
+
+#we evaluate the quality of the functional space
+fspaces_qualityM <- mFD::quality.fspaces(
+  sp_dist     = sp_distM,
+  maxdim_pcoa = 2
+)
+
+
+#get species coordinates in the functional space
+sp_faxes_coordM <- fspaces_qualityM$details_fspaces$sp_pc_coord
+
+
+
+
+
+
+
+
+
+
+
+
+#we calculate alpha functional diversity indices for MALES
+
+alpha_fd_indicesM <- mFD::alpha.fd.multidim(
+  sp_faxes_coord = sp_faxes_coordM[, c("PC1", "PC2")],
+  asb_sp_w       = Mat_AbundanciasM,
+  ind_vect       = c("feve", "fric", "fdiv", "fspe"),
+  scaling        = TRUE,
+  check_input    = TRUE,
+  details_returned = TRUE
+)
+
 
 resultadosMachos <- alpha_fd_indicesM$functional_diversity_indices
 
 
-write.table(resultadosMachos, "resultadosMachos.txt")
+#we export the male results
+write.table(
+  resultadosMachos,
+  "output/resultadosMachos.txt",
+  sep = "\t",
+  row.names = TRUE
+)
 
 
-######################PRUEBAS ESTADISTICAS#####################################
+######################STATISTICAL TESTS#####################################
 
-#Vamos a realizar ANOVA
-#1) llamamos los paquetes
+#we are going to perform ANOVA
+#1) we load the packages
 
 library(dplyr)
 library(rstatix)
 library(ggpubr)
 
-#2) Vamos a organizar las matrices de datos para poder llevar a cabo el ANOVA
-#crearemos una matriz nueva a partir de resultadosHembras con una nueva columna sex "F" para las hembras
 
+#2) we organize the data matrices in order to run the ANOVA
+#we create a new dataframe from ResultadosHembras adding a new column Sex = "H" for females
 
-hembrasANOVA <- data.frame(Sex = rep("H", nrow(ResultadosHembras)), ResultadosHembras)
+hembrasANOVA <- data.frame(
+  Sex = rep("H", nrow(ResultadosHembras)),
+  ResultadosHembras,
+  row.names = rownames(ResultadosHembras)
+)
+
 nombres_columnas <- names(ResultadosHembras)
 names(hembrasANOVA) <- c("Sex", nombres_columnas)
 
-View(hembrasANOVA)
 
-#crearemos una matriz nueva a resultadosMachos una nueva columna sex "M" para los machos
+#we create a new dataframe from resultadosMachos adding a new column Sex = "M" for males
 
+machosANOVA <- data.frame(
+  Sex = rep("M", nrow(resultadosMachos)),
+  resultadosMachos,
+  row.names = rownames(resultadosMachos)
+)
 
-machosANOVA <- data.frame(Sex = rep("M", nrow(resultadosMachos)), resultadosMachos)
 nombres_columnasM <- names(resultadosMachos)
 names(machosANOVA) <- c("Sex", nombres_columnasM)
 
-View(machosANOVA)
 
-#Continuamos organizando la matriz, ahora le agregaremos una nueva columna que es habitat
-#para distinguir las comunidades urbanas de las rurales con hembras
+#we continue organizing the matrix, now we add a new column Habitat
+#to distinguish urban and rural communities for females
 
-hembrasANOVA$MuniID=substr(rownames(hembrasANOVA),1,5)
-hembrasANOVA$Habitat="Urban"
-hembrasANOVA$Habitat[substr(rownames(hembrasANOVA),7,7)=="R"]="Rural"
-
-View (hembrasANOVA)
-#Continuamos organizando la matriz, ahora le agregaremos una nueva columna que es habitat
-#para distinguir las comunidades urbanas de las rurales con machos
+hembrasANOVA$MuniID <- substr(rownames(hembrasANOVA), 1, 5)
+hembrasANOVA$Habitat <- "Urban"
+hembrasANOVA$Habitat[substr(rownames(hembrasANOVA), 7, 7) == "R"] <- "Rural"
 
 
-machosANOVA$MuniID=substr(rownames(machosANOVA),1,5)
-machosANOVA$Habitat="Urban"
-machosANOVA$Habitat[substr(rownames(machosANOVA),7,7)=="R"]="Rural"
+#we continue organizing the matrix, now we add a new column Habitat
+#to distinguish urban and rural communities for males
 
-View(machosANOVA)
-
-#juntamos los dos dataframes el de hembras y el de machos
-datosANOVA<- rbind(hembrasANOVA, machosANOVA)
+machosANOVA$MuniID <- substr(rownames(machosANOVA), 1, 5)
+machosANOVA$Habitat <- "Urban"
+machosANOVA$Habitat[substr(rownames(machosANOVA), 7, 7) == "R"] <- "Rural"
 
 
+#we merge the female and male dataframes
+datosANOVA <- rbind(hembrasANOVA, machosANOVA)
 
 
-#3) ahora si vamos a realizar el ANOVA
-datosANOVA$Sex =as.factor(datosANOVA$Sex)
-datosANOVA$Habitat=as.factor(datosANOVA$Habitat)
-datosANOVA$MuniID = as.factor(datosANOVA$MuniID)
+#3) now we run the ANOVA
+datosANOVA$Sex     <- as.factor(datosANOVA$Sex)
+datosANOVA$Habitat <- as.factor(datosANOVA$Habitat)
+datosANOVA$MuniID  <- as.factor(datosANOVA$MuniID)
 
+
+
+
+
+
+#we obtain descriptive statistics by Sex and Habitat
 datosANOVA %>%
   group_by(Sex, Habitat) %>%
   get_summary_stats(fric, type = "mean_sd")
 
+
 #BOXPLOT
 bxp <- ggboxplot(
-  datosANOVA, x = "Habitat", y = "fric",
-  color = "Sex", palette = "jco"
+  datosANOVA,
+  x     = "Habitat",
+  y     = "fric",
+  color = "Sex",
+  palette = "jco"
 )
 bxp
 
-#SUPOSICIONES
-#1 OUTLIERS
+
+#ASSUMPTIONS
+#1) OUTLIERS
 datosANOVA %>%
   group_by(Sex, Habitat) %>%
   identify_outliers(fric)
-#esta check!!
+#this is checked!!
 
 
-#NORMALIDAD
+#NORMALITY
 datosANOVA %>%
   group_by(Sex, Habitat) %>%
   shapiro_test(fric)
 
-#normales si el alpha es de 0.01 pero a Paulita no le gusto
+
+#normal if alpha = 0.01, but this was not accepted
 datosANOVA %>%
   group_by(Habitat) %>%
   levene_test(fric ~ Sex)
-#HOMOGENEIDAD ENTRE RURAL Y URBANO
+#HOMOGENEITY BETWEEN RURAL AND URBAN
+
+
 datosANOVA %>%
   group_by(Sex) %>%
   levene_test(fric ~ Habitat)
-#HOMOGENEIDAD VARIANZA ENTRE SETSITOS
+#HOMOGENEITY OF VARIANCES BETWEEN SEXES
 
-#HOMOGENEIDAD COVARIANZAS
+
+#HOMOGENEITY OF COVARIANCES
 box_m(datosANOVA[, "fric", drop = FALSE], datosANOVA$Sex)
-#COVARIANZAS PLENAS PARA SEXO Y HABITAT
+#FULL COVARIANCE FOR SEX AND HABITAT
 
 box_m(datosANOVA[, "fric", drop = FALSE], datosANOVA$Habitat)
 
 
-# Two-way mixed ANOVA test73
+#Two-way mixed ANOVA test
 res.aov <- anova_test(
-  data = datosANOVA, dv = fric, wid = MuniID, within = c(Habitat,Sex)
+  data   = datosANOVA,
+  dv     = fric,
+  wid    = MuniID,
+  within = c(Habitat, Sex)
 )
+
 get_anova_table(res.aov)
 
-res.aov <- anova_test(
-  data = datosANOVA, dv = fric, wid = MuniID, within = c(Habitat,Sex)
+
+#paired t-tests
+TTESTHEMBRASPAREADA <- t.test(
+  datosANOVA$fric[1:33],
+  datosANOVA$fric[34:66],
+  paired = TRUE
 )
-get_anova_table(res.aov)
 
-TTESTHEMBRASPAREADA= t.test(datosANOVA$fric[1:33],datosANOVA$fric[34:66],paired=T)
-TTESTMACHOSPAREADA= t.test(datosANOVA$fric[67:99],datosANOVA$fric[100:132],paired=T)
+TTESTMACHOSPAREADA <- t.test(
+  datosANOVA$fric[67:99],
+  datosANOVA$fric[100:132],
+  paired = TRUE
+)
 
 
-##RESIDUALES
-datosANOVA$ResFric=as.numeric(residuals(lm(datosANOVA$fric~datosANOVA$sp_richn)))
-#BOXPLOT
+##RESIDUALS
+datosANOVA$ResFric <- as.numeric(
+  residuals(lm(datosANOVA$fric ~ datosANOVA$sp_richn))
+)
+
+
+#BOXPLOT OF RESIDUALS
 bxp <- ggboxplot(
-  datosANOVA, x = "Habitat", y = "ResFric",
-  color = "Sex", palette = "jco"
+  datosANOVA,
+  x     = "Habitat",
+  y     = "ResFric",
+  color = "Sex",
+  palette = "jco"
 )
 bxp
-#1 OUTLIERS
+
+
+#1) OUTLIERS
 datosANOVA %>%
   group_by(Sex, Habitat) %>%
   identify_outliers(ResFric)
-#esta check!!
+#this is checked!!
 
 
-#NORMALIDAD
+
+
+
+#NORMALITY OF RESIDUALS
 datosANOVA %>%
   group_by(Sex, Habitat) %>%
   shapiro_test(ResFric)
 
-#normales si el alpha es de 0.01 pero a Paulita no le gusto
+
+#normal if alpha = 0.01, but this was not accepted
 datosANOVA %>%
   group_by(Habitat) %>%
   levene_test(ResFric ~ Sex)
-#HOMOGENEIDAD ENTRE RURAL Y URBANO
+#HOMOGENEITY BETWEEN RURAL AND URBAN
+
+
 datosANOVA %>%
   group_by(Sex) %>%
   levene_test(ResFric ~ Habitat)
-#HOMOGENEIDAD VARIANZA ENTRE SETSITOS
+#HOMOGENEITY OF VARIANCES BETWEEN SEXES
 
-#HOMOGENEIDAD COVARIANZAS
+
+#HOMOGENEITY OF COVARIANCES
 box_m(datosANOVA[, "ResFric", drop = FALSE], datosANOVA$Sex)
-#COVARIANZAS PLENAS PARA SEXO Y HABITAT
+#FULL COVARIANCE FOR SEX AND HABITAT
 
 box_m(datosANOVA[, "ResFric", drop = FALSE], datosANOVA$Habitat)
 
-# Two-way mixed ANOVA test
+
+#Two-way mixed ANOVA test using residuals
 res.aov <- anova_test(
-  data = datosANOVA, dv = ResFric, wid = MuniID, within = c(Habitat,Sex)
+  data   = datosANOVA,
+  dv     = ResFric,
+  wid    = MuniID,
+  within = c(Habitat, Sex)
 )
+
 get_anova_table(res.aov)
 
 
+#descriptive statistics of residuals
 datosANOVA %>%
   group_by(Sex, Habitat) %>%
   get_summary_stats(ResFric, type = "mean_sd")
 
-##Anova con permutaciones
+
+##ANOVA WITH PERMUTATIONS
 
 library(permuco)
-datosANOVA$MuniIDS=paste0(datosANOVA$MuniID,datosANOVA$Sex)
-resultadosfinalFdiv=aovperm(fdiv~Sex*Habitat+Error(MuniIDS/(Habitat)),data=datosANOVA,np=50000)
+
+#we create a unique ID combining municipality and sex
+datosANOVA$MuniIDS <- paste0(datosANOVA$MuniID, datosANOVA$Sex)
+
+resultadosfinalFdiv <- aovperm(
+  fdiv ~ Sex * Habitat + Error(MuniIDS / (Habitat)),
+  data = datosANOVA,
+  np   = 50000
+)
+
 resultadosfinalFdiv
 
-##Ahora vamos a graficas utilizando un violin plot
+
+##NOW WE CREATE FIGURES USING A VIOLIN PLOT
+
+library(ggplot2)
 
 ggplot(datosANOVA, aes(x = Habitat, y = fdiv, fill = Sex)) +
   geom_violin(trim = FALSE) +
   geom_boxplot(width = 0.1, position = position_dodge(0.9)) + 
-  labs(title = "Comparación entre patrones de coloración de passeriformes",
-       x = "Hábitat",
-       y = "Coloración (FDiv)") +
+  labs(
+    title = "Comparison of coloration patterns in passerines",
+    x     = "Habitat",
+    y     = "Coloration (FDiv)"
+  ) +
   theme_minimal() +
-  scale_fill_manual(name = "Sexo", values = c("deepskyblue4", "deepskyblue"), labels = c("Hembras", "Machos")) +
+  scale_fill_manual(
+    name   = "Sex",
+    values = c("deepskyblue4", "deepskyblue"),
+    labels = c("Females", "Males")
+  ) +
   theme(
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.border     = element_rect(color = "black", fill = NA, size = 1),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black")
+    axis.line        = element_line(color = "black")
   )
 
 
-#MULTIPLICAMOS POR SER INTERACCION
-
+#MULTIPLICATION DUE TO INTERACTION
+#(model Mod2 is assumed to be defined previously)
 summary(Mod2)
 
 
-#ahora vamos a hacer el anova pero teniendo en cuenta el efecto de la riqueza sobre
-#los calculos de coloración
-#1) vamos a correr la correlacion entre riqueza y FDIV
+#now we perform the ANOVA taking into account the effect of species richness
+#on coloration calculations
+#1) we run the correlation between richness and FDiv
 
-correlacionFDiv <- cor.test(datosANOVA$sp_richn, datosANOVA$fdiv)
+correlacionFDiv <- cor.test(
+  datosANOVA$sp_richn,
+  datosANOVA$fdiv
+)
 
-
-summary(lm(datosANOVA$sp_richn~datosANOVA$fdiv))
+summary(lm(datosANOVA$sp_richn ~ datosANOVA$fdiv))
 
 correlacionFDiv
 
-#3) ahora vamos a graficar la correlacion
 
-plot(datosANOVA$sp_richn, datosANOVA$fdiv, 
-     xlab = "Riqueza de especies", 
-     ylab = "Coloración (FDiv)")
-
-points(datosANOVA$sp_richn, datosANOVA$fdiv, col = "black", bg = "gray", pch = 19, cex = 1)
-
-text(x = 25, y = 95, labels = paste("Correlación:", round(correlacionFDiv$estimate, 2)))
-     
-
-
-#2) extraer los valores de la desviacion estandar
-
-residualesFdiv <- residuals(lm(datosANOVA$fdiv~datosANOVA$sp_richn))
-
-
-
-#para guardar los datos en la matriz de datosANOVA
-datosANOVA$RESfdiv = residuals(lm(datosANOVA$fdiv~datosANOVA$sp_richn))
-
-#Ahora vamos a llevar a cabo el anova mixto con los residuales de la regresion para
-#controlar el efecto de la riqueza
-
-
-resultadosfinalFdivPermutaciones=aovperm(ResFdiv~Sex*Habitat+Error(MuniIDS/(Habitat)),data=datosANOVA,np=50000)
-resultadosfinalFdivPermutaciones
-
-#Ahora vamos a graficar 
-
-ggplot(datosANOVA, aes(x = Habitat, y = ResFdiv, fill = Sex)) +
-  geom_violin(trim = FALSE) +
-  geom_boxplot(width = 0.1, position = position_dodge(0.9)) + 
-  labs(title = "Comparación entre patrones de coloración de passeriformes",
-       x = "Hábitat",
-       y = "Coloración (FDiv)") +
-  theme_minimal() +
-  scale_fill_manual(name = "Sexo", values = c("deepskyblue4", "deepskyblue"), labels = c("Hembras", "Machos")) +
-  theme(
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black")
-  )
-
-##Ahora vamos a realizar los analisis pero con riqueza funcional
-
-resultadosFRich=aovperm(fric~Sex*Habitat+Error(MuniIDS/(Habitat)),data=datosANOVA,np=50000)
-resultadosFRich
-
-
-ggplot(datosANOVA, aes(x = Habitat, y = fric, fill = Sex)) +
-  geom_violin(trim = FALSE) +
-  geom_boxplot(width = 0.1, position = position_dodge(0.9)) + 
-  labs(title = "Comparación entre patrones de coloración de passeriformes",
-       x = "Hábitat",
-       y = "Coloración (FRic)") +
-  theme_minimal() +
-  scale_fill_manual(name = "Sexo", values = c("deepskyblue4", "deepskyblue"), labels = c("Hembras", "Machos")) +
-  theme(
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black")
-  )
-
-##ahora vamos a evaluar el efecto de la riqueza de especies en los calculos de
-#Diversidad funcional
+##NOW WE EVALUATE THE EFFECT OF SPECIES RICHNESS ON FUNCTIONAL DIVERSITY (FRic)
 
 correlacionFRic <- cor.test(datosANOVA$sp_richn, datosANOVA$fric)
 
-
-summary(lm(datosANOVA$sp_richn~datosANOVA$fric))
+summary(lm(sp_richn ~ fric, data = datosANOVA))
 
 correlacionFRic
 
 
+#3) NOW WE PLOT THE CORRELATION
 
-#3) ahora vamos a graficar la correlacion
+plot(
+  datosANOVA$sp_richn,
+  datosANOVA$fric,
+  xlab = "Species richness",
+  ylab = "Color space (FRic)",
+  pch  = 19,
+  col  = "gray"
+)
+
+text(
+  x      = max(datosANOVA$sp_richn) * 0.7,
+  y      = max(datosANOVA$fric) * 0.9,
+  labels = paste("Correlation:", round(correlacionFRic$estimate, 2))
+)
 
 
-plot(datosANOVA$sp_richn, datosANOVA$fric, 
-     xlab = "Riqueza de especies", 
-     ylab = "Espacio de color (FRic)")
+##NOW WE CONTROL FOR SPECIES RICHNESS
+#(extract residuals from the regression)
 
-points(datosANOVA$sp_richn, datosANOVA$fric, col = "black", bg = "gray", pch = 19, cex = 1)
-
-text(x = 25, y = 95, labels = paste("Correlación:", round(correlacionFRic$estimate, 2)))
+modelo_fric <- lm(fric ~ sp_richn, data = datosANOVA)
+datosANOVA$ResFric <- residuals(modelo_fric)
 
 
+##NOW WE EVALUATE HOW COMMUNITIES OCCUPY FUNCTIONAL SPACE
+#(mixed ANOVA with permutations)
 
+resultadosFRichPermutaciones <- aovperm(
+  ResFric ~ Sex * Habitat + Error(MuniIDS / (Habitat)),
+  data = datosANOVA,
+  np   = 50000
+)
 
-##Ahora vamos a evaluar que tanto espacio ocupan las comunidades en el espacio funcional
-
-resultadosFRichPermutaciones=aovperm(ResFric~Sex*Habitat+Error(MuniIDS/(Habitat)),data=datosANOVA,np=50000)
 resultadosFRichPermutaciones
 
+
+##NOW WE PLOT THE RESULTS BASED ON RESIDUALS
 
 ggplot(datosANOVA, aes(x = Habitat, y = ResFric, fill = Sex)) +
   geom_violin(trim = FALSE) +
   geom_boxplot(width = 0.1, position = position_dodge(0.9)) + 
-  labs(title = "Comparación entre patrones de coloración de passeriformes",
-       x = "Hábitat",
-       y = "Espacio de color (FRic)") +
+  labs(
+    title = "Comparison of coloration patterns in passerines",
+    x     = "Habitat",
+    y     = "Color space (FRic)"
+  ) +
   theme_minimal() +
-  scale_fill_manual(name = "Sexo", values = c("deepskyblue4", "deepskyblue"), labels = c("Hembras", "Machos")) +
+  scale_fill_manual(
+    name   = "Sex",
+    values = c("deepskyblue4", "deepskyblue"),
+    labels = c("Females", "Males")
+  ) +
   theme(
-    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    panel.border     = element_rect(color = "black", fill = NA, size = 1),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.line = element_line(color = "black")
+    axis.line        = element_line(color = "black")
   )
 
 
+##EXPLORATORY PLOT OF COLOR LOCI (MALES)
 
-
-plot(machos$LociVS, machos$LociUVS, 
-     xlab = "LociVS", 
-     ylab = "LociUVS")
-
-points(machos$LociVS, machos$LociUVS, col = "black", bg = "gray", pch = 19, cex = 1)
+plot(
+  machos$LociVS,
+  machos$LociUVS,
+  xlab = "LociVS",
+  ylab = "LociUVS",
+  pch  = 19,
+  col  = "gray"
+)
